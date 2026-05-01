@@ -4,6 +4,10 @@ Deterministic FSM-based UI automation: states, observations, actions, transition
 
 **It will automatically read your screen and click:** use the included **Playwright driver** (`PlaywrightDriver`). It launches a browser, reads the page (optionally with **Claude** to parse content into state/buttons/quiz), and performs clicks (Back, Next, Submit, choices). **Randomness / anti-detection:** Default is **NIST SP 800-90A Rev. 1 CTR_DRBG** (AES-256, with derivation function and reseed) in `nist-ctr-drbg.ts` / `aes-drbg.ts` + `prng.ts`. Used for: **click intervals**, **jitter**, **tiny misclick rate** (then correct), and **random instinct** (`prng.pick()`). Step budget **~12–14.5–15 s** per answer+submit (`stepDeadlineMs`). Call `initRandomLayer(config)` before running steps. See **docs/PRNG_AND_SCREEN_CONTROL.md**.
 
+What makes this genuinely non-trivial is the layering: the FSM handles the deterministic navigation skeleton, Claude handles perception and reasoning at the quiz layer, and a local Ollama inference path (with embedding-based learning memory backed by SQLite) progressively reduces how often the cloud model is even called — routing only the uncertain or novel questions outward. The PRNG layer isn't cosmetic either; it's a full NIST CTR_DRBG seeded at runtime, generating statistically indistinct timing signatures across sessions. The whole thing sits on top of a structured step-runner with hard per-step deadlines, safe-exit fallbacks, and a metrics pipeline that tracks answer accuracy by category over time — so it actually gets measurably better the more it runs.
+
+The driver interface is intentionally thin so the core FSM logic is fully decoupled from whatever's driving the browser. Playwright, Puppeteer, a browser MCP, a mock driver for unit tests — all identical from the agent's perspective. The state machine doesn't know or care what's underneath.
+
 **Known context:**  
 - **Apex Learning** (`siteContext: "apex"`): course.apexlearning.com — Resume, unit cards, lesson strip, quiz.  
 - **Edmentum** (`siteContext: "edmentum"`): edm.geniussis.com FEDashboard — Virtual Learning, course grid (scroll → click subject → LAUNCH).  
