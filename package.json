@@ -1,0 +1,37 @@
+{
+  "name": "apex-automater",
+  "version": "1.0.0",
+  "description": "Deterministic FSM-based UI automation agent with quiz solving",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "node scripts/copy-subjects-to-visual.mjs",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "run": "tsx src/run-with-playwright.ts",
+    "run:edmentum": "tsx src/run-edmentum-flow.ts",
+    "graph:viz": "node scripts/learning-graph-sse.mjs",
+    "metrics:report": "node scripts/quiz-metrics-report.mjs",
+    "copy:subjects": "node scripts/copy-subjects-to-visual.mjs",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "keywords": [
+    "automation",
+    "fsm",
+    "ui",
+    "state-machine"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "better-sqlite3": "^12.8.0",
+    "playwright": "^1.49.0"
+  }
+}

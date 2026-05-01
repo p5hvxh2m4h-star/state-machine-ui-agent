@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment & secrets — NEVER commit these
+.env
+.env.local
+.env*.local
+config.local.json
+
+# Runtime session / personal data
+session-plan.json
+run-plan.*.json
+
+# Logs & databases (generated at runtime)
+logs/
+*.log
+*.db
+*.jsonl
+
+# Screenshots
+artifacts/screenshot-fails/
+screenshot-fail-*.png
+
+# Editor / OS / Cursor IDE internals
+.cursor/
+.vscode/settings.json
+.idea/
+*.code-workspace
+Thumbs.db
+.DS_Store
+
+# Misc test artifacts
+_test_folder_created.txt

@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Learning graph — subject memory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #05060a;
+      --math: #ff2d3d;
+      --history: #ff8c19;
+      --english: #4d9fff;
+      --biology: #1fe3a3;
+      --dim: rgba(240, 245, 255, 0.45);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      position: relative;
+    }
+    #aurora-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 85% 70% at 15% 85%, rgba(255, 45, 61, 0.38), transparent 55%),
+        radial-gradient(ellipse 75% 65% at 88% 75%, rgba(255, 140, 25, 0.32), transparent 52%),
+        radial-gradient(ellipse 70% 60% at 75% 15%, rgba(77, 159, 255, 0.28), transparent 50%),
+        radial-gradient(ellipse 80% 55% at 8% 20%, rgba(31, 227, 163, 0.3), transparent 48%),
+        radial-gradient(ellipse 120% 100% at 50% 50%, rgba(8, 10, 18, 0.9), transparent 70%);
+      animation: auroraBeat 3.2s ease-in-out infinite;
+      mix-blend-mode: screen;
+    }
+    @keyframes auroraBeat {
+      0%, 100% { opacity: 0.72; filter: saturate(1.05) brightness(1); transform: scale(1); }
+      50% { opacity: 1; filter: saturate(1.25) brightness(1.12); transform: scale(1.03); }
+    }
+    #aurora-bg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1;
+      mix-blend-mode: screen;
+    }
+    #aurora-bg.outcome-wrong::after,
+    #aurora-bg.outcome-right::after {
+      opacity: 1;
+      background: radial-gradient(
+        ellipse 95% 80% at 50% 40%,
+        color-mix(in srgb, var(--outcome-flash) 70%, transparent),
+        transparent 65%
+      );
+      animation: auroraOutcomePulse 0.95s cubic-bezier(0.25, 0.9, 0.2, 1) forwards;
+    }
+    @keyframes auroraOutcomePulse {
+      0% { opacity: 0; transform: scale(0.92); filter: brightness(0.8); }
+      35% { opacity: 1; filter: brightness(1.25); }
+      100% { opacity: 0; transform: scale(1.08); filter: brightness(1); }
+    }
+    canvas { display: block; position: relative; z-index: 1; }
+    #hud {
+      position: fixed;
+      left: 1.25rem;
+      bottom: 1.25rem;
+      right: auto;
+      max-width: min(92vw, 24rem);
+      z-index: 2;
+      padding: 1rem 1.15rem;
+      background: linear-gradient(145deg, rgba(12, 14, 22, 0.92), rgba(6, 8, 14, 0.88));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      color: var(--dim);
+      font-size: 0.72rem;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    #hud h1 {
+      margin: 0 0 0.6rem;
+      font-family: "Syne", sans-serif;
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: 0.04em;
+      color: #eef2ff;
+      text-transform: uppercase;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.28rem 0;
+    }
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px currentColor;
+    }
+    #stats {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 2;
+      font-size: 0.65rem;
+      color: rgba(200, 210, 230, 0.5);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    #grain {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.045;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+    #ping-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #ping-question,
+    #ping-quiz {
+      position: absolute;
+      inset: 0;
+      --ping-c: rgba(255, 255, 255, 0.9);
+    }
+    #ping-question::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(22vmin, 160px);
+      height: min(22vmin, 160px);
+      margin: min(-11vmin, -80px) 0 0 min(-11vmin, -80px);
+      border-radius: 50%;
+      border: 2px solid var(--ping-c);
+      box-shadow:
+        0 0 24px 2px var(--ping-c),
+        inset 0 0 20px color-mix(in srgb, var(--ping-c) 35%, transparent);
+      opacity: 0;
+      transform: scale(0.2);
+      filter: blur(0);
+    }
+    #ping-question.ping-on::before {
+      animation: pingQuestion 0.5s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+    }
+    @keyframes pingQuestion {
+      0% { opacity: 0; transform: scale(0.15); }
+      35% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.45); filter: blur(1px); }
+    }
+    #ping-quiz::before {
+      content: "";
+      position: absolute;
+      inset: -15%;
+      background:
+        radial-gradient(ellipse 55% 45% at 50% 48%, color-mix(in srgb, var(--ping-c) 55%, transparent) 0%, transparent 62%),
+        radial-gradient(ellipse 90% 80% at 50% 50%, color-mix(in srgb, var(--ping-c) 22%, transparent) 0%, transparent 58%);
+      opacity: 0;
+      transform: scale(0.75);
+      mix-blend-mode: screen;
+    }
+    #ping-quiz::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 140vmin;
+      height: 140vmin;
+      margin: -70vmin 0 0 -70vmin;
+      border-radius: 50%;
+      border: 3px solid color-mix(in srgb, var(--ping-c) 70%, transparent);
+      box-shadow:
+        0 0 80px 12px color-mix(in srgb, var(--ping-c) 40%, transparent),
+        inset 0 0 100px color-mix(in srgb, var(--ping-c) 15%, transparent);
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    #ping-quiz.ping-on::before {
+      animation: pingQuizBg 1.05s ease-out forwards;
+    }
+    #ping-quiz.ping-on::after {
+      animation: pingQuizRing 1.05s cubic-bezier(0.15, 0.85, 0.2, 1) forwards;
+    }
+    @keyframes pingQuizBg {
+      0% { opacity: 0; transform: scale(0.5); }
+      12% { opacity: 1; }
+      100% { opacity: 0; transform: scale(1.15); }
+    }
+    @keyframes pingQuizRing {
+      0% { opacity: 0; transform: scale(0.35); }
+      18% { opacity: 1; }
+      100% { opacity: 0; transform: scale(1); }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.160.0",
+        "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="aurora-bg" aria-hidden="true"></div>
+  <div id="ping-layer" aria-hidden="true">
+    <div id="ping-question"></div>
+    <div id="ping-quiz"></div>
+  </div>
+  <div id="grain" aria-hidden="true"></div>
+  <div id="stats"></div>
+  <div id="hud">
+    <h1>Subject memory graph</h1>
+    <div id="hud-subjects"></div>
+    <p style="margin: 0.75rem 0 0; opacity: 0.75; font-size: 0.68rem;">
+      <code>feedback_incorrect</code> / <code>feedback_correct</code> → red/green ping (blended with subject) + background aura flash. <code>question_complete</code> / <code>quiz_complete</code> → submit / quiz pings. <code>?live=1</code> with the agent or <code>npm run graph:viz</code>.
+    </p>
+  </div>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const DEFAULT_SUBJECT_ROWS = [
+      { short: "Algebra", full: "Algebra II Sem 2", hex: "#ff2d3d" },
+      { short: "History", full: "U.S. History Sem 2", hex: "#ff8c19" },
+      { short: "English", full: "English 10 Sem 2", hex: "#4d9fff" },
+      { short: "Biology", full: "Biology Sem 2", hex: "#1fe3a3" },
+    ];
+
+    async function fetchSubjectRows() {
+      try {
+        const r = await fetch("/subjects.json", { cache: "no-store" });
+        if (!r.ok) throw new Error(String(r.status));
+        return (await r.json()).subjects;
+      } catch (e) {
+        console.warn("[LearningGraph] Embedded subject fallback — open page via http://127.0.0.1:8765 for live subjects.json", e);
+        return DEFAULT_SUBJECT_ROWS;
+      }
+    }
+
+    function clusterCenters(n, THREE) {
+      if (n === 4) {
+        return [
+          new THREE.Vector3(1, 1, 1),
+          new THREE.Vector3(1, -1, -1),
+          new THREE.Vector3(-1, 1, -1),
+          new THREE.Vector3(-1, -1, 1),
+        ].map((v) => v.normalize().multiplyScalar(2.2));
+      }
+      const pts = [];
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < n; i++) {
+        const y = n === 1 ? 0 : 1 - (i / Math.max(1, n - 1)) * 2;
+        const r = Math.sqrt(Math.max(0, 1 - y * y));
+        const theta = golden * i;
+        pts.push(new THREE.Vector3(Math.cos(theta) * r, y, Math.sin(theta) * r).normalize().multiplyScalar(2.2));
+      }
+      return pts;
+    }
+
+    (async () => {
+    const rows = await fetchSubjectRows();
+    const SUBJECTS = rows.map((s) => ({
+      id: s.full,
+      short: s.short,
+      hex: s.hex,
+      color: new THREE.Color(s.hex),
+    }));
+
+    const hudSubjects = document.getElementById("hud-subjects");
+    if (hudSubjects) {
+      hudSubjects.innerHTML = SUBJECTS.map(
+        (s) =>
+          `<div class="row"><span class="swatch" style="color:${s.hex};background:${s.hex}"></span> ${s.id}</div>`
+      ).join("");
+    }
+
+    const centers = clusterCenters(SUBJECTS.length, THREE);
+
+    const SUBJECT_INDEX = Object.fromEntries(SUBJECTS.map((s, i) => [s.id, i]));
+    const ALIAS_INDEX = Object.fromEntries(SUBJECTS.map((s, i) => [s.short, i]));
+
+    const N_PER = 48;
+    const nodes = [];
+    const bySubject = SUBJECTS.map(() => []);
+    let idx = 0;
+    for (let s = 0; s < SUBJECTS.length; s++) {
+      const center = centers[s];
+      const tangentA = new THREE.Vector3(0, 1, 0).cross(center).normalize();
+      const tangentB = center.clone().cross(tangentA).normalize();
+      for (let i = 0; i < N_PER; i++) {
+        const r = 0.15 + Math.random() * 0.55;
+        const u = Math.random() * Math.PI * 2;
+        const off = tangentA.clone().multiplyScalar(Math.cos(u) * r).add(tangentB.clone().multiplyScalar(Math.sin(u) * r));
+        off.add(center.clone().multiplyScalar((Math.random() - 0.5) * 0.12));
+        const pos = center.clone().add(off);
+        const node = { id: idx++, subject: s, pos, vel: new THREE.Vector3() };
+        nodes.push(node);
+        bySubject[s].push(node);
+      }
+    }
+
+    const edgeKeys = new Set();
+    const initialEdges = [];
+    const MAX_EDGES = 4500;
+    function addEdge(a, b, strength = 1) {
+      if (a === b) return;
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      if (edgeKeys.has(key)) return;
+      edgeKeys.add(key);
+      initialEdges.push({ a, b, strength, born: performance.now(), pulse: 1 });
+      while (initialEdges.length > MAX_EDGES) {
+        const dropped = initialEdges.shift();
+        if (dropped) edgeKeys.delete(dropped.a < dropped.b ? `${dropped.a},${dropped.b}` : `${dropped.b},${dropped.a}`);
+      }
+    }
+    for (let s = 0; s < SUBJECTS.length; s++) {
+      const list = bySubject[s];
+      for (let k = 0; k < 160; k++) {
+        const i = (Math.random() * list.length) | 0;
+        let j = (Math.random() * list.length) | 0;
+        if (i === j) j = (j + 1) % list.length;
+        const dist = list[i].pos.distanceTo(list[j].pos);
+        if (dist < 1.35) addEdge(nodes.indexOf(list[i]), nodes.indexOf(list[j]), 0.4 + Math.random() * 0.6);
+      }
+    }
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x05060a, 0.038);
+
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 1.2, 5.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    document.body.insertBefore(renderer.domElement, document.getElementById("grain"));
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.55;
+    controls.minDistance = 2.8;
+    controls.maxDistance = 12;
+
+    const auraGroup = new THREE.Group();
+    scene.add(auraGroup);
+    const auraMeshes = [];
+    for (let s = 0; s < centers.length; s++) {
+      const geo = new THREE.SphereGeometry(3.2, 48, 48);
+      const mat = new THREE.MeshBasicMaterial({
+        color: SUBJECTS[s].color,
+        transparent: true,
+        opacity: 0.07,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(centers[s]).multiplyScalar(0.85);
+      auraGroup.add(mesh);
+      auraMeshes.push(mesh);
+    }
+
+    const amb = new THREE.AmbientLight(0x8899cc, 0.28);
+    scene.add(amb);
+    const pointLights = [];
+    for (let s = 0; s < centers.length; s++) {
+      const pl = new THREE.PointLight(SUBJECTS[s].color.getHex(), 0.85, 10, 1.8);
+      pl.position.copy(centers[s]).multiplyScalar(1.05);
+      scene.add(pl);
+      pointLights.push(pl);
+    }
+
+    const sphereGeo = new THREE.SphereGeometry(0.055, 10, 10);
+    const inst = new THREE.InstancedMesh(sphereGeo, new THREE.MeshBasicMaterial(), nodes.length);
+    const _m = new THREE.Matrix4();
+    nodes.forEach((n, i) => {
+      _m.makeTranslation(n.pos.x, n.pos.y, n.pos.z);
+      inst.setMatrixAt(i, _m);
+      inst.setColorAt(i, SUBJECTS[n.subject].color);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    const graphGroup = new THREE.Group();
+    graphGroup.add(inst);
+
+    const maxLines = 12000;
+    const linePos = new Float32Array(maxLines * 6);
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
+    const lineMat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const lineColors = new Float32Array(maxLines * 6);
+    lineGeo.setAttribute("color", new THREE.BufferAttribute(lineColors, 3));
+
+    let lineCount = 0;
+    function syncLines() {
+      lineCount = 0;
+      const pushSeg = (x0, y0, z0, x1, y1, z1, col, alpha) => {
+        if (lineCount >= maxLines) return;
+        const i = lineCount * 6;
+        linePos[i] = x0;
+        linePos[i + 1] = y0;
+        linePos[i + 2] = z0;
+        linePos[i + 3] = x1;
+        linePos[i + 4] = y1;
+        linePos[i + 5] = z1;
+        for (let k = 0; k < 2; k++) {
+          lineColors[i + k * 3] = col.r * alpha;
+          lineColors[i + k * 3 + 1] = col.g * alpha;
+          lineColors[i + k * 3 + 2] = col.b * alpha;
+        }
+        lineCount++;
+      };
+
+      const now = performance.now();
+      for (const e of initialEdges) {
+        const A = nodes[e.a].pos;
+        const B = nodes[e.b].pos;
+        const age = (now - e.born) / 1000;
+        const pulse = Math.max(0.2, Math.min(1, e.pulse * (0.88 + 0.12 * Math.sin(now * 0.012 + e.a))));
+        const sub = nodes[e.a].subject;
+        const col = SUBJECTS[sub].color;
+        pushSeg(A.x, A.y, A.z, B.x, B.y, B.z, col, 0.18 + 0.62 * pulse * e.strength * (age < 0.35 ? Math.min(1, age * 4) : 1));
+      }
+      lineGeo.setDrawRange(0, lineCount * 2);
+      lineGeo.attributes.position.needsUpdate = true;
+      lineGeo.attributes.color.needsUpdate = true;
+    }
+
+    const lines = new THREE.LineSegments(lineGeo, lineMat);
+    graphGroup.add(lines);
+    scene.add(graphGroup);
+
+    let edgesAdded = initialEdges.length;
+    const statsEl = document.getElementById("stats");
+
+    function randomEdgeForSubject(subjectIndex) {
+      const list = bySubject[subjectIndex];
+      if (list.length < 2) return;
+      let a = list[(Math.random() * list.length) | 0];
+      let b = list[(Math.random() * list.length) | 0];
+      if (a === b) b = list[(list.indexOf(a) + 1) % list.length];
+      addEdge(nodes.indexOf(a), nodes.indexOf(b), 0.45 + Math.random() * 0.55);
+      edgesAdded++;
+    }
+
+    function burstEdgesForSubject(subjectIndex, n) {
+      for (let i = 0; i < n; i++) randomEdgeForSubject(subjectIndex);
+    }
+
+    function resolveSubjectIndex(subj) {
+      if (typeof subj !== "string") return -1;
+      let ix = SUBJECT_INDEX[subj];
+      if (ix !== undefined) return ix;
+      ix = ALIAS_INDEX[subj];
+      if (ix !== undefined) return ix;
+      return -1;
+    }
+
+    function emit(ev) {
+      const raw = typeof ev === "string" ? ev : ev.subject;
+      const ix = resolveSubjectIndex(raw);
+      if (ix >= 0) burstEdgesForSubject(ix, 5);
+      else console.warn("[LearningGraph] unknown subject:", raw);
+    }
+
+    const pingQuestionEl = document.getElementById("ping-question");
+    const pingQuizEl = document.getElementById("ping-quiz");
+    const auroraBgEl = document.getElementById("aurora-bg");
+
+    function hexFromSubject(subjectFull) {
+      const ix = resolveSubjectIndex(subjectFull);
+      if (ix >= 0) return "#" + SUBJECTS[ix].color.getHexString();
+      let h = 0;
+      for (let i = 0; i < subjectFull.length; i++) h = (h * 31 + subjectFull.charCodeAt(i)) >>> 0;
+      const c = new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.55);
+      return "#" + c.getHexString();
+    }
+
+    /** Subject color lerped toward signal red (wrong) or green (right). */
+    function blendOutcomePingColor(subjectFull, outcome) {
+      const base = new THREE.Color(hexFromSubject(subjectFull));
+      const signal = new THREE.Color(outcome === "incorrect" ? 0xff1a35 : 0x18f090);
+      base.lerp(signal, outcome === "incorrect" ? 0.58 : 0.52);
+      return "#" + base.getHexString();
+    }
+
+    function flashAuroraOutcome(outcome, subjectFull) {
+      if (!auroraBgEl) return;
+      const hex = blendOutcomePingColor(subjectFull, outcome);
+      auroraBgEl.style.setProperty("--outcome-flash", hex);
+      auroraBgEl.classList.remove("outcome-wrong", "outcome-right");
+      void auroraBgEl.offsetWidth;
+      auroraBgEl.classList.add(outcome === "incorrect" ? "outcome-wrong" : "outcome-right");
+      setTimeout(() => auroraBgEl.classList.remove("outcome-wrong", "outcome-right"), 1000);
+    }
+
+    function triggerFeedbackOutcomePing(subjectFull, outcome) {
+      const color = blendOutcomePingColor(subjectFull, outcome);
+      pingQuizEl.classList.remove("ping-on");
+      pingQuestionEl.style.setProperty("--ping-c", color);
+      pingQuestionEl.classList.remove("ping-on");
+      void pingQuestionEl.offsetWidth;
+      pingQuestionEl.classList.add("ping-on");
+      flashAuroraOutcome(outcome, subjectFull);
+      setTimeout(() => pingQuestionEl.classList.remove("ping-on"), 620);
+    }
+
+    function triggerQuestionPing(subjectFull) {
+      pingQuizEl.classList.remove("ping-on");
+      pingQuestionEl.style.setProperty("--ping-c", hexFromSubject(subjectFull));
+      pingQuestionEl.classList.remove("ping-on");
+      void pingQuestionEl.offsetWidth;
+      pingQuestionEl.classList.add("ping-on");
+      setTimeout(() => pingQuestionEl.classList.remove("ping-on"), 520);
+    }
+    function triggerQuizPing(subjectFull) {
+      pingQuestionEl.classList.remove("ping-on");
+      pingQuizEl.style.setProperty("--ping-c", hexFromSubject(subjectFull));
+      pingQuizEl.classList.remove("ping-on");
+      void pingQuizEl.offsetWidth;
+      pingQuizEl.classList.add("ping-on");
+      setTimeout(() => pingQuizEl.classList.remove("ping-on"), 1100);
+    }
+
+    function handleGraphEvent(data) {
+      if (!data || !data.subject) return;
+      const t = data.type;
+      if (t === "feedback_incorrect") {
+        const ix = resolveSubjectIndex(data.subject);
+        if (ix >= 0) burstEdgesForSubject(ix, 10);
+        triggerFeedbackOutcomePing(data.subject, "incorrect");
+        return;
+      }
+      if (t === "feedback_correct") {
+        const ix = resolveSubjectIndex(data.subject);
+        if (ix >= 0) burstEdgesForSubject(ix, 10);
+        triggerFeedbackOutcomePing(data.subject, "correct");
+        return;
+      }
+      if (t === "question_complete") {
+        triggerQuestionPing(data.subject);
+        return;
+      }
+      if (t === "quiz_complete") {
+        const ix = resolveSubjectIndex(data.subject);
+        if (ix >= 0) burstEdgesForSubject(ix, 32);
+        triggerQuizPing(data.subject);
+        return;
+      }
+      if (t === "connection" || t === "pattern" || t === "node" || !t) {
+        emit(data);
+      }
+    }
+
+    window.LearningGraph = {
+      emit,
+      handleGraphEvent,
+      pingQuestion: triggerQuestionPing,
+      pingQuiz: triggerQuizPing,
+      pingFeedbackWrong: (s) => triggerFeedbackOutcomePing(s, "incorrect"),
+      pingFeedbackRight: (s) => triggerFeedbackOutcomePing(s, "correct"),
+      SUBJECTS: SUBJECTS.map((s) => s.id),
+    };
+
+    const params = new URLSearchParams(location.search);
+    const live = params.get("live") === "1";
+
+    if (live) {
+      const es = new EventSource("/stream");
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handleGraphEvent(data);
+        } catch (_) {}
+      };
+      es.onerror = () => {
+        statsEl.textContent = "SSE reconnecting…";
+      };
+    } else {
+      setInterval(() => {
+        SUBJECTS.forEach((_, i) => {
+          if (Math.random() < 0.55) burstEdgesForSubject(i, 2);
+        });
+      }, 140);
+    }
+
+    let t0 = performance.now();
+    function frame(t) {
+      const dt = (t - t0) * 0.001;
+      t0 = t;
+      const beat = 0.5 + 0.5 * Math.sin(t * 0.004);
+      graphGroup.rotation.y += dt * 0.11;
+      auraGroup.rotation.y = graphGroup.rotation.y * 0.92;
+      auraMeshes.forEach((mesh, i) => {
+        const phase = t * 0.0035 + i * 1.7;
+        mesh.material.opacity = 0.05 + 0.09 * (0.5 + 0.5 * Math.sin(phase)) * (0.7 + 0.3 * beat);
+        const sc = 1 + 0.06 * Math.sin(phase * 1.3);
+        mesh.scale.setScalar(sc);
+      });
+      pointLights.forEach((pl, i) => {
+        pl.intensity = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 0.005 + i * 2.1));
+      });
+      syncLines();
+      controls.update();
+      renderer.render(scene, camera);
+      statsEl.textContent = `edges ${edgesAdded}\n${live ? "live SSE (no demo)" : "fast demo + emit"}`;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    })().catch(console.error);
+  </script>
+</body>
+</html>

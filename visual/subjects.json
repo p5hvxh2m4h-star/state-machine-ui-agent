@@ -1,0 +1,8 @@
+{
+  "subjects": [
+    { "short": "Algebra", "full": "Algebra II Sem 2", "hex": "#ff2d3d" },
+    { "short": "History", "full": "U.S. History Sem 2", "hex": "#ff8c19" },
+    { "short": "English", "full": "English 10 Sem 2", "hex": "#4d9fff" },
+    { "short": "Biology", "full": "Biology Sem 2", "hex": "#1fe3a3" }
+  ]
+}
