@@ -18,7 +18,7 @@ The correct way is **two separate commands**:
 In PowerShell:
 
 ```powershell
-cd "C:\Users\Parsa A\Apex-Automater"
+cd "<your-project-folder>"
 Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
 Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
 ```
@@ -40,7 +40,7 @@ Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
 Always run from the **project folder**:
 
 ```powershell
-cd "C:\Users\Parsa A\Apex-Automater"
+cd "<your-project-folder>"
 npm install
 ```
 
@@ -64,7 +64,7 @@ No code changes are needed. Your app code stays the same.
 ## 4. Quick copy-paste (all steps)
 
 ```powershell
-cd "C:\Users\Parsa A\Apex-Automater"
+cd "<your-project-folder>"
 Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
 Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
 npm install
