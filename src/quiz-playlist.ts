@@ -8,10 +8,11 @@ import type { QuizPlaylist, QuizTarget } from "./types.js";
 /** Current run targets (session plan mirrors this in session-plan.json). */
 export const DEFAULT_QUIZ_PLAYLIST: QuizPlaylist = {
   targets: [
-    { subject: "History", code: "4.1.2" },
-    { subject: "History", code: "4.1.5" },
-    { subject: "History", code: "4.2.2" },
-    { subject: "History", code: "4.2.5" },
+    { subject: "History", code: "5.2.4" },
+    { subject: "History", code: "5.2.7" },
+    { subject: "History", code: "5.3.2" },
+    { subject: "History", code: "5.3.4" },
+    { subject: "History", code: "5.3.6" },
   ],
 };
 

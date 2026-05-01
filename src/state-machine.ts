@@ -351,7 +351,9 @@ function decideApexActivityStrip(
     const targetShown = targetTripleVisibleInStripButtons(obs, tq);
     if (!mapLike || targetShown) {
       if (obs.buttons.includes("RESUME")) {
-        return { action: { type: "CLICK", target: "RESUME", lessonCode: tq }, reason: "TASK_COMPLETED_GO_NEXT" };
+        // Navigate directly to the target tile rather than clicking an unscoped RESUME — RESUME may
+        // belong to a different tile on the same map (e.g. a Practice tile next to the target Quiz).
+        return { action: { type: "NAVIGATE_LESSON", code: tq }, reason: "TASK_COMPLETED_GO_NEXT" };
       }
       if (obs.buttons.includes("CONTINUE")) {
         return { action: { type: "CLICK", target: "CONTINUE" }, reason: "TASK_COMPLETED_GO_NEXT" };
@@ -384,8 +386,11 @@ function decideApexActivityStrip(
           return { action: { type: "CLICK", target: "START" }, reason: "TASK_COMPLETED_GO_NEXT" };
         }
       }
+      // Use NAVIGATE_LESSON to go directly to the target tile — avoids accidentally clicking RESUME
+      // on a different "In Progress" tile (e.g. a Practice tile) that happens to be on the same map.
+      // NAVIGATE_LESSON uses clickLessonCodeInAllFrames which handles split DOM correctly.
       if (obs.buttons.includes("RESUME") && !shouldDeferResumeOnActivityMap(obs, code)) {
-        return { action: { type: "CLICK", target: "RESUME", lessonCode: code }, reason: "TASK_COMPLETED_GO_NEXT" };
+        return { action: { type: "NAVIGATE_LESSON", code }, reason: "TASK_COMPLETED_GO_NEXT" };
       }
       // Strip lists target code but parser `lessonCode` often mismatches focused tile — do not loop CLICK tile forever.
       // CST/TST intros show CONTINUE and/or START without matching `insideTargetQuizPagedReader` / paged reader heuristics.
@@ -523,15 +528,16 @@ export function decide(
     if (
       !skipPriorGapResume &&
       lc &&
+      // Only attempt recovery RESUME when the target tile is actually visible in the strip.
+      // If 5.2.7 isn't listed yet, skip straight to NAVIGATE_LESSON instead of looping on RESUME.
+      stripListsLessonCode(obs, lc) &&
       (obs.buttons.includes("RESUME") || obs.buttons.includes("Resume")) &&
       !shouldDeferResumeOnActivityMap(obs, lc)
     ) {
+      // Navigate directly to the target tile instead of clicking an unscoped RESUME — RESUME may
+      // belong to a different tile (e.g. a Practice tile) that shares the same map.
       return {
-        action: {
-          type: "CLICK",
-          target: obs.buttons.includes("RESUME") ? "RESUME" : "Resume",
-          lessonCode: lc,
-        },
+        action: { type: "NAVIGATE_LESSON", code: lc },
         reason: "TASK_COMPLETED_GO_NEXT",
       };
     }

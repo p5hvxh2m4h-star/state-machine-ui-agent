@@ -37,6 +37,12 @@ export type QuizLearningRecord = {
   platformHint?: string;
   /** Ollama embedding of questionBrief + choicesBrief (when captured at commit time). */
   emb?: number[];
+  /** True when prior-run memory was retrieved and injected into the solver prompt for this question. */
+  memoryHit?: boolean;
+  /** Number of incorrect-outcome matches that were injected (0 when memoryHit is false/absent). */
+  priorIncorrectMatches?: number;
+  /** Number of correct-outcome matches that were injected (0 when memoryHit is false/absent). */
+  priorCorrectMatches?: number;
 };
 
 type PendingSubmit = {
@@ -48,6 +54,8 @@ type PendingSubmit = {
   reasoning?: string;
   subject?: string;
   quizCode?: string;
+  /** Retrieval metadata captured at solve time — stamped into the JSONL record on commit. */
+  retrievalMeta?: LearningRetrievalMeta;
 };
 
 let pending: PendingSubmit | null = null;
@@ -180,7 +188,7 @@ export function extractCorrectAnswerHint(feedbackText: string): string | undefin
 }
 
 /** Call immediately after each successful solver submit (paired with next feedback step). */
-export function rememberQuizSubmitForLearning(meta: PendingSubmit): void {
+export function rememberQuizSubmitForLearning(meta: Omit<PendingSubmit, "retrievalMeta"> & { retrievalMeta?: LearningRetrievalMeta }): void {
   if (disabled()) return;
   pending = { ...meta };
 }
@@ -214,6 +222,9 @@ export async function commitQuizLearningFromFeedback(obs: Observation): Promise<
   const questionBrief = brief(pending.question, 900);
   const choicesBrief = brief(pending.choices.join(" | "), 600);
 
+  const rm = pending.retrievalMeta;
+  const memoryHit = rm ? (rm.incorrectMatches + rm.correctMatches) > 0 : false;
+
   const rec: QuizLearningRecord = {
     ts: Date.now(),
     subject: pending.subject,
@@ -223,6 +234,13 @@ export async function commitQuizLearningFromFeedback(obs: Observation): Promise<
     choicesBrief,
     chosenSummary: chosenParts.join("; ") || "?",
     ...(platformHint ? { platformHint } : {}),
+    ...(memoryHit
+      ? {
+          memoryHit: true,
+          priorIncorrectMatches: rm!.incorrectMatches,
+          priorCorrectMatches: rm!.correctMatches,
+        }
+      : {}),
   };
 
   if (ollamaEmbeddingsConfigured()) {
@@ -272,26 +290,44 @@ export type BuildLearningPromptOptions = {
   topIncorrect?: number;
 };
 
+/** Metadata returned alongside the prompt block so callers can log/stamp it. */
+export type LearningRetrievalMeta = {
+  /** Total past records scanned (after subject filter). */
+  totalScanned: number;
+  /** Number of incorrect-outcome records injected into the prompt. */
+  incorrectMatches: number;
+  /** Number of correct-outcome records injected into the prompt. */
+  correctMatches: number;
+};
+
+export type BuildLearningPromptResult = {
+  block: string;
+  meta: LearningRetrievalMeta;
+};
+
+const EMPTY_META: LearningRetrievalMeta = { totalScanned: 0, incorrectMatches: 0, correctMatches: 0 };
+
 /**
  * Build a short block for Claude (text + vision): similar past mistakes and confirmed patterns.
  * Uses Ollama embeddings when available (query + stored `emb`), else token Jaccard.
+ * Returns both the prompt block and retrieval metadata (match counts) for logging/stamping.
  */
 export async function buildLearningContextForPrompt(
   question: string,
   choices: string[],
   options: BuildLearningPromptOptions = {}
-): Promise<string> {
-  if (disabled()) return "";
+): Promise<BuildLearningPromptResult> {
+  if (disabled()) return { block: "", meta: EMPTY_META };
   const maxChars = options.maxChars ?? DEFAULT_MAX_PROMPT_CHARS;
   const topIncorrectN = options.topIncorrect ?? 4;
   const code = normCode(options.quizCode);
 
   const blob = `${question}\n${choices.join("\n")}`;
   const tokCurrent = tokenize(blob);
-  if (tokCurrent.size < 2) return "";
+  if (tokCurrent.size < 2) return { block: "", meta: EMPTY_META };
 
   const records = readTailRecords();
-  if (records.length === 0) return "";
+  if (records.length === 0) return { block: "", meta: EMPTY_META };
 
   const queryVec = ollamaEmbeddingsConfigured() ? await embedTextOllama(blob) : null;
   if (ollamaEmbeddingsConfigured() && !queryVec && process.env.QUIZ_LEARNING_DEBUG === "1") {
@@ -300,8 +336,10 @@ export async function buildLearningContextForPrompt(
 
   type Scored = { rec: QuizLearningRecord; score: number };
   const scored: Scored[] = [];
+  let scanned = 0;
   for (const rec of records) {
     if (!subjectMatches(rec.subject, options.subject)) continue;
+    scanned++;
     const tokPast = tokenize(`${rec.questionBrief}\n${rec.choicesBrief}`);
     const jac = jaccard100(tokCurrent, tokPast);
     let score: number;
@@ -334,7 +372,13 @@ export async function buildLearningContextForPrompt(
     if (pickedIncorrect.length >= topIncorrectN && pickedCorrect.length >= 3) break;
   }
 
-  if (pickedIncorrect.length === 0 && pickedCorrect.length === 0) return "";
+  const meta: LearningRetrievalMeta = {
+    totalScanned: scanned,
+    incorrectMatches: pickedIncorrect.length,
+    correctMatches: pickedCorrect.length,
+  };
+
+  if (pickedIncorrect.length === 0 && pickedCorrect.length === 0) return { block: "", meta };
 
   const lines: string[] = [
     "Learnings from earlier runs on this machine (same subject when noted; quiz questions are often reworded — match concepts, not wording):",
@@ -358,7 +402,7 @@ export async function buildLearningContextForPrompt(
 
   let block = lines.join("\n");
   if (block.length > maxChars) block = block.slice(0, maxChars - 1) + "…";
-  return block;
+  return { block, meta };
 }
 
 /** Clear pending (e.g. safe exit mid-quiz) — optional hook */

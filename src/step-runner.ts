@@ -117,6 +117,7 @@ function recordQuizSubmitMetrics(
     quizCode?: string;
     question: string;
     choices: string[];
+    retrievalMeta?: import("./quiz-learning-memory.js").LearningRetrievalMeta;
   },
   submitTag?: { activityKind: "quiz" | "test"; textVisionAgreed?: boolean | null },
   routeMeta?: { solverRoute?: QuizTextSolverRoute | "vision"; questionCategory?: string | null }
@@ -146,6 +147,7 @@ function recordQuizSubmitMetrics(
       reasoning: solver.reasoning,
       subject: learningSnap.subject,
       quizCode: learningSnap.quizCode,
+      retrievalMeta: learningSnap.retrievalMeta,
     });
   }
 }
@@ -331,18 +333,24 @@ export async function runOneStep(
     !obs.quizSummaryReached &&
     !obs.buttons.includes("START")
   ) {
-    const learnQ = async (q: string, ch: string[]) =>
-      config.quizLearningEnabled === false
-        ? ""
-        : buildLearningContextForPrompt(q, ch, {
-            subject: targetSubject,
-            quizCode: quizMetricsQuizCode,
-            maxChars: config.quizLearningMaxPromptChars,
-          });
-    const learnSnap = (q: string, ch: string[]) =>
+    const learnQ = async (q: string, ch: string[]) => {
+      if (config.quizLearningEnabled === false) return { block: "", meta: { totalScanned: 0, incorrectMatches: 0, correctMatches: 0 } };
+      const result = await buildLearningContextForPrompt(q, ch, {
+        subject: targetSubject,
+        quizCode: quizMetricsQuizCode,
+        maxChars: config.quizLearningMaxPromptChars,
+      });
+      if (result.meta.incorrectMatches > 0 || result.meta.correctMatches > 0) {
+        console.log(
+          `[Learning] Memory hit — ${result.meta.incorrectMatches} incorrect + ${result.meta.correctMatches} correct prior match(es) from ${result.meta.totalScanned} scanned — injecting into prompt`
+        );
+      }
+      return result;
+    };
+    const learnSnap = (q: string, ch: string[], retrievalMeta?: import("./quiz-learning-memory.js").LearningRetrievalMeta) =>
       config.quizLearningEnabled === false
         ? undefined
-        : { subject: targetSubject, quizCode: quizMetricsQuizCode, question: q, choices: ch };
+        : { subject: targetSubject, quizCode: quizMetricsQuizCode, question: q, choices: ch, retrievalMeta };
 
     const submitKind = strictTest ? ("test" as const) : ("quiz" as const);
     const tag = (textVisionAgreed?: boolean | null) =>
@@ -363,7 +371,7 @@ export async function runOneStep(
           reasoning: "blind_first_choice",
         };
         let visionUsedFlag = false;
-        const learning0 = await learnQ(obs.questionText ?? "", []);
+        const { block: learning0, meta: meta0 } = await learnQ(obs.questionText ?? "", []);
         const qCat0 = inferQuizQuestionCategory({
           subject: targetSubject,
           passage: obs.quizPassageText,
@@ -401,7 +409,7 @@ export async function runOneStep(
             );
             action = { type: "NOOP" };
           } else {
-            recordQuizSubmitMetrics(action, visionHint, visionUsedFlag, minConf, metricsSolver, learnSnap(obs.questionText ?? "", []), tag(), {
+            recordQuizSubmitMetrics(action, visionHint, visionUsedFlag, minConf, metricsSolver, learnSnap(obs.questionText ?? "", [], meta0), tag(), {
               solverRoute: "vision",
               questionCategory: qCat0,
             });
@@ -422,7 +430,7 @@ export async function runOneStep(
           reasoning: "blind_first_choice",
         };
         let visionUsedFlag = false;
-        const learning0b = await learnQ(obs.questionText ?? "", obs.choices ?? []);
+        const { block: learning0b, meta: meta0b } = await learnQ(obs.questionText ?? "", obs.choices ?? []);
         const qCat0b = inferQuizQuestionCategory({
           subject: targetSubject,
           passage: obs.quizPassageText,
@@ -466,7 +474,7 @@ export async function runOneStep(
               visionUsedFlag,
               minConf,
               metricsSolver,
-              learnSnap(obs.questionText ?? "", obs.choices ?? []),
+              learnSnap(obs.questionText ?? "", obs.choices ?? [], meta0b),
               tag(),
               { solverRoute: "vision", questionCategory: qCat0b }
             );
@@ -476,8 +484,8 @@ export async function runOneStep(
         }
       }
     } else {
-      const learningBlock = await learnQ(quiz.question, quiz.choices);
-      const learningSnapMain = learnSnap(quiz.question, quiz.choices);
+      const { block: learningBlock, meta: learningMeta } = await learnQ(quiz.question, quiz.choices);
+      const learningSnapMain = learnSnap(quiz.question, quiz.choices, learningMeta);
       const questionCategory = inferQuizQuestionCategory({
         subject: targetSubject,
         passage: quiz.passage,

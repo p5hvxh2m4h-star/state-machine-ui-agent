@@ -119,9 +119,9 @@ export async function handleQuizScreen(
   const quiz = extractQuiz(obs);
   if (!quiz) return { action: "SKIP", reason: "Not a quiz screen" };
 
-  const learning =
+  const { block: learning } =
     options.config?.quizLearningEnabled === false
-      ? ""
+      ? { block: "" }
       : await buildLearningContextForPrompt(quiz.question, quiz.choices, {
           subject: options.targetSubject,
           quizCode: options.quizMetricsQuizCode,

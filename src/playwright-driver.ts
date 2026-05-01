@@ -503,7 +503,8 @@ async function clickApexFooterNavButton(page: Page, target: string): Promise<boo
   return false;
 }
 
-/** Click RESUME inside the activity card/tile that also shows the lesson code (e.g. 3.2.5 Quiz — In Progress). */
+/** Click RESUME inside the activity card/tile that also shows the lesson code (e.g. 3.2.5 Quiz — In Progress).
+ * Explicitly skips cards labelled "Practice" — those are unscored activities that should never be entered. */
 async function clickResumeNearLessonCodeInAllFrames(page: Page, codeParts: number[]): Promise<boolean> {
   const needle = codeParts.join(".");
   const embedded = new RegExp(`\\b${needle.replace(/\./g, "\\.")}\\b`);
@@ -512,6 +513,7 @@ async function clickResumeNearLessonCodeInAllFrames(page: Page, codeParts: numbe
       const card = frame
         .locator("[class*='card'], [class*='activity'], [class*='tile'], section, article, [role='region']")
         .filter({ hasText: embedded })
+        .filter({ hasNotText: /\bPractice\b/i })
         .first();
       if ((await card.count()) === 0) continue;
       const resumeInCard = card
@@ -843,7 +845,15 @@ export class PlaywrightDriver implements IUIDriver {
               lessonCode.length > 0 &&
               (await clickResumeNearLessonCodeInAllFrames(page, lessonCode));
             if (!scoped) {
-              await doClickResumeOrReview();
+              // Only fall through to unscoped RESUME if there's no target code — avoids clicking
+              // Practice / Study tiles when the scoped card didn't have a RESUME (e.g. target already completed).
+              if (!lessonCode || lessonCode.length === 0) {
+                await doClickResumeOrReview();
+              } else {
+                // Scoped failed — do not blindly click RESUME on a random tile (could be Practice).
+                // Let the FSM fall through to NAVIGATE_LESSON on the next step.
+                return { ok: false, error: "Scoped RESUME not found for target tile", recoverable: true };
+              }
             }
           } else if (await clickApexActivitiesButton(page, target)) {
             /* header Activities — back to module map */
